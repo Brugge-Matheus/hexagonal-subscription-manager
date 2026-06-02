@@ -12,7 +12,7 @@ type UpdateSubscription struct {
 }
 
 func (u UpdateSubscription) Execute(id, customerID, planID, status string) (entities.Subscription, error) {
-	_, err := u.SubscriptionRepository.FindByID(id)
+	existing, err := u.SubscriptionRepository.FindByID(id)
 	if err != nil {
 		return entities.Subscription{}, errors.Join(ErrSubscriptionNotFound, err)
 	}
@@ -22,6 +22,8 @@ func (u UpdateSubscription) Execute(id, customerID, planID, status string) (enti
 		CustomerID: customerID,
 		PlanID:     planID,
 		Status:     status,
+		CreatedAt:  existing.CreatedAt,
+		CanceledAt: existing.CanceledAt,
 	}
 
 	if err := u.SubscriptionRepository.Save(subscription); err != nil {

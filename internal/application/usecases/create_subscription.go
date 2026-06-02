@@ -15,10 +15,11 @@ type CreateSubscription struct {
 
 func (c CreateSubscription) Execute(customerID, planID string) (entities.Subscription, error) {
 	subscription := entities.Subscription{
-		ID: strconv.FormatInt(time.Now().UnixNano(), 10),
+		ID:         strconv.FormatInt(time.Now().UnixNano(), 10),
 		CustomerID: customerID,
-		PlanID: planID,
-		Status: "active",
+		PlanID:     planID,
+		Status:     "active",
+		CreatedAt:  time.Now(),
 	}
 
 	if err := c.SubscriptionRepository.Save(subscription); err != nil {

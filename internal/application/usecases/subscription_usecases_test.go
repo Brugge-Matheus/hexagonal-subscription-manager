@@ -1,23 +1,21 @@
 package usecases
 
 import (
-	"path/filepath"
 	"testing"
+	"time"
 
 	"subscription-manager/internal/adapters/output/repositories"
+	"subscription-manager/internal/domain/entities"
 )
 
 func TestSubscriptionUseCasesCRUD(t *testing.T) {
-	basePath := filepath.Join(t.TempDir(), "subscriptions")
-	repository, err := repositories.NewFileSubscription(basePath)
-	if err != nil {
-		t.Fatalf("unexpected error creating repository: %v", err)
-	}
+	repository := repositories.NewInMemorySubscription()
 
 	createUseCase := CreateSubscription{SubscriptionRepository: repository}
 	listUseCase := ListSubscriptions{SubscriptionRepository: repository}
 	getUseCase := GetSubscription{SubscriptionRepository: repository}
 	updateUseCase := UpdateSubscription{SubscriptionRepository: repository}
+	cancelUseCase := CancelSubscription{SubscriptionRepository: repository}
 	deleteUseCase := DeleteSubscription{SubscriptionRepository: repository}
 
 	created, err := createUseCase.Execute("customer-1", "basic-plan")
@@ -27,6 +25,10 @@ func TestSubscriptionUseCasesCRUD(t *testing.T) {
 
 	if created.Status != "active" {
 		t.Fatalf("expected active status, got %s", created.Status)
+	}
+
+	if created.CreatedAt.IsZero() {
+		t.Fatal("expected created_at to be filled")
 	}
 
 	listed, err := listUseCase.Execute()
@@ -56,11 +58,55 @@ func TestSubscriptionUseCasesCRUD(t *testing.T) {
 		t.Fatalf("expected suspended status, got %s", updated.Status)
 	}
 
+	canceled, err := cancelUseCase.Execute(created.ID)
+	if err != nil {
+		t.Fatalf("unexpected error canceling subscription: %v", err)
+	}
+
+	if !canceled.Subscription.IsCanceled() {
+		t.Fatal("expected subscription to be canceled")
+	}
+
+	if canceled.Subscription.Status != entities.StatusCanceled {
+		t.Fatalf("expected canceled status, got %s", canceled.Subscription.Status)
+	}
+
+	if !canceled.RefundEligible {
+		t.Fatal("expected refund eligibility for recent subscription")
+	}
+
 	if err := deleteUseCase.Execute(created.ID); err != nil {
 		t.Fatalf("unexpected error deleting subscription: %v", err)
 	}
 
 	if _, err := getUseCase.Execute(created.ID); err == nil {
 		t.Fatal("expected error when reading deleted subscription")
+	}
+}
+
+func TestCancelSubscriptionWithoutRefundAfterSevenDays(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	cancelUseCase := CancelSubscription{SubscriptionRepository: repository}
+
+	createdAt := time.Now().Add(-8 * 24 * time.Hour)
+	subscription := entities.Subscription{
+		ID:         "sub-old",
+		CustomerID: "customer-1",
+		PlanID:     "basic-plan",
+		Status:     entities.StatusActive,
+		CreatedAt:  createdAt,
+	}
+
+	if err := repository.Save(subscription); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	result, err := cancelUseCase.Execute(subscription.ID)
+	if err != nil {
+		t.Fatalf("unexpected error canceling old subscription: %v", err)
+	}
+
+	if result.RefundEligible {
+		t.Fatal("expected no refund for subscription older than seven days")
 	}
 }
