@@ -31,6 +31,9 @@ func main() {
 		UpdateSubscriptionUseCase: usecases.UpdateSubscription{
 			SubscriptionRepository: repository,
 		},
+		CancelSubscriptionUseCase: usecases.CancelSubscription{
+			SubscriptionRepository: repository,
+		},
 		DeleteSubscriptionUseCase: usecases.DeleteSubscription{
 			SubscriptionRepository: repository,
 		},

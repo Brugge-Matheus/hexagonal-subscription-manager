@@ -16,6 +16,7 @@ type CLI struct {
 	ListSubscriptionsUseCase  usecases.ListSubscriptions
 	GetSubscriptionUseCase    usecases.GetSubscription
 	UpdateSubscriptionUseCase usecases.UpdateSubscription
+	CancelSubscriptionUseCase usecases.CancelSubscription
 	DeleteSubscriptionUseCase usecases.DeleteSubscription
 	Out                       io.Writer
 }
@@ -35,6 +36,8 @@ func (c CLI) Call(argv []string) error {
 		return c.showSubscription(argv[1:])
 	case "update-subscription":
 		return c.updateSubscription(argv[1:])
+	case "cancel-subscription":
+		return c.cancelSubscription(argv[1:])
 	case "delete-subscription":
 		return c.deleteSubscription(argv[1:])
 	default:
@@ -137,6 +140,30 @@ func (c CLI) deleteSubscription(args []string) error {
 	return c.writeLine("Subscription deleted successfully.")
 }
 
+func (c CLI) cancelSubscription(args []string) error {
+	if len(args) < 1 {
+		return c.writeLine("missing subscription id for cancel-subscription")
+	}
+
+	result, err := c.CancelSubscriptionUseCase.Execute(args[0])
+	if err != nil {
+		if errors.Is(err, usecases.ErrSubscriptionNotFound) {
+			return c.writeLine("Subscription not found.")
+		}
+
+		return err
+	}
+
+	title := "Subscription canceled successfully."
+	if result.RefundEligible {
+		title += "\nRefund: proportional refund eligible."
+	} else {
+		title += "\nRefund: no proportional refund."
+	}
+
+	return c.writeSubscription(title, result.Subscription)
+}
+
 func (c CLI) writeSubscription(title string, subscription entities.Subscription) error {
 	lines := []string{
 		title,
@@ -155,6 +182,7 @@ func (c CLI) printUsage() {
   go run ./cmd/app list-subscriptions
   go run ./cmd/app show-subscription SUBSCRIPTION_ID
   go run ./cmd/app update-subscription SUBSCRIPTION_ID CUSTOMER_ID PLAN_ID STATUS
+  go run ./cmd/app cancel-subscription SUBSCRIPTION_ID
   go run ./cmd/app delete-subscription SUBSCRIPTION_ID`)
 }
 
