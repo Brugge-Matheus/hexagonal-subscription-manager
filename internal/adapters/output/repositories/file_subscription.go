@@ -35,6 +35,10 @@ func (f FileSubscription) Save(subscription entities.Subscription) error {
 func (f FileSubscription) FindByID(id string) (entities.Subscription, error) {
 	data, err := os.ReadFile(f.filePath(id))
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return entities.Subscription{}, ErrSubscriptionNotFound
+		}
+
 		return entities.Subscription{}, err
 	}
 
@@ -74,11 +78,15 @@ func (f FileSubscription) All() ([]entities.Subscription, error) {
 
 func (f FileSubscription) Delete(id string) error {
 	err := os.Remove(f.filePath(id))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrSubscriptionNotFound
+		}
+
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func (f FileSubscription) filePath(id string) string {
