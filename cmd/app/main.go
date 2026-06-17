@@ -10,17 +10,12 @@ import (
 	inputwebhook "subscription-manager/internal/adapters/input/webhook"
 	"subscription-manager/internal/adapters/output/notification"
 	"subscription-manager/internal/adapters/output/repositories"
+	"subscription-manager/internal/application/ports"
 	"subscription-manager/internal/application/usecases"
 )
 
 func main() {
-	repository, err := repositories.NewFileSubscription(
-		filepath.Join("data", "subscriptions"),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	repository := buildRepository()
 	notifier := notification.LogNotification{Out: os.Stdout}
 
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -70,4 +65,26 @@ func main() {
 	if err := appCLI.Call(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func buildRepository() ports.SubscriptionRepository {
+	if os.Getenv("REPOSITORY") == "db" {
+		dsn := os.Getenv("DATABASE_URL")
+		if dsn == "" {
+			dsn = "postgres://subscription_manager:subscription_manager@localhost:5432/subscription_manager?sslmode=disable"
+		}
+		repo, err := repositories.NewDBSubscription(dsn)
+		if err != nil {
+			log.Fatalf("failed to connect to database: %v", err)
+		}
+		log.Println("repository: postgresql")
+		return repo
+	}
+
+	repo, err := repositories.NewFileSubscription(filepath.Join("data", "subscriptions"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("repository: file")
+	return repo
 }
