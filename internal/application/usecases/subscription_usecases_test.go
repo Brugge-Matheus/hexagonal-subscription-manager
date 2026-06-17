@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -108,5 +109,91 @@ func TestCancelSubscriptionWithoutRefundAfterSevenDays(t *testing.T) {
 
 	if result.RefundEligible {
 		t.Fatal("expected no refund for subscription older than seven days")
+	}
+}
+
+func TestProcessPaymentEventConfirmed(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
+
+	sub := entities.Subscription{
+		ID:         "sub-pay-1",
+		CustomerID: "customer-1",
+		PlanID:     "basic",
+		Status:     entities.StatusSuspended,
+		CreatedAt:  time.Now(),
+	}
+	if err := repository.Save(sub); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	if err := uc.Execute("sub-pay-1", "customer-1", "basic", "confirmed"); err != nil {
+		t.Fatalf("unexpected error processing confirmed payment: %v", err)
+	}
+
+	found, err := repository.FindByID("sub-pay-1")
+	if err != nil {
+		t.Fatalf("unexpected error finding subscription: %v", err)
+	}
+
+	if found.Status != entities.StatusActive {
+		t.Fatalf("expected active status after confirmed payment, got %s", found.Status)
+	}
+}
+
+func TestProcessPaymentEventRefused(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
+
+	sub := entities.Subscription{
+		ID:         "sub-pay-2",
+		CustomerID: "customer-1",
+		PlanID:     "basic",
+		Status:     entities.StatusActive,
+		CreatedAt:  time.Now(),
+	}
+	if err := repository.Save(sub); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	if err := uc.Execute("sub-pay-2", "customer-1", "basic", "refused"); err != nil {
+		t.Fatalf("unexpected error processing refused payment: %v", err)
+	}
+
+	found, err := repository.FindByID("sub-pay-2")
+	if err != nil {
+		t.Fatalf("unexpected error finding subscription: %v", err)
+	}
+
+	if found.Status != entities.StatusSuspended {
+		t.Fatalf("expected suspended status after refused payment, got %s", found.Status)
+	}
+}
+
+func TestProcessPaymentEventInvalidStatus(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
+
+	sub := entities.Subscription{
+		ID:     "sub-pay-3",
+		Status: entities.StatusActive,
+	}
+	if err := repository.Save(sub); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	err := uc.Execute("sub-pay-3", "", "", "unknown")
+	if !errors.Is(err, ErrInvalidPaymentStatus) {
+		t.Fatalf("expected ErrInvalidPaymentStatus, got %v", err)
+	}
+}
+
+func TestProcessPaymentEventNotFound(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
+
+	err := uc.Execute("nonexistent", "", "", "confirmed")
+	if !errors.Is(err, ErrSubscriptionNotFound) {
+		t.Fatalf("expected ErrSubscriptionNotFound, got %v", err)
 	}
 }

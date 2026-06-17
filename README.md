@@ -2,118 +2,162 @@
 
 Projeto acadêmico em Go para estudo de Arquitetura Hexagonal (Ports & Adapters).
 
-## Estado atual
+| Campo | Informação |
+|---|---|
+| Disciplina | Arquitetura de Software |
+| Alunos | Matheus Brugge, Stela David, Douglas Wilhan, Leonardo Santana e Ana Babiak |
+| Arquitetura | Hexagonal (Ports & Adapters) |
+| Linguagem | Go (sem framework web) |
 
-O projeto foi migrado de Ruby para **Go** e, no estágio atual, implementa o **CRUD completo de subscriptions pela CLI**, com persistência em arquivos JSON dentro de `data/subscriptions`.
+## Arquitetura
 
-## Arquitetura escolhida
+O sistema é organizado em três zonas que nunca invertem a direção de dependência:
 
-A arquitetura escolhida é a **Hexagonal (Ports & Adapters)**.
-
-- `internal/domain/entities`: entidades do domínio.
-- `internal/application/usecases`: casos de uso da aplicação.
-- `internal/application/ports`: contratos que a aplicação usa para falar com fora.
-- `internal/adapters/input`: adaptadores de entrada, como a CLI.
-- `internal/adapters/output`: adaptadores de saída, como persistência em arquivos.
-- `cmd/app`: ponto de entrada e composição das dependências.
-
-## Descricao das implementacoes e fluxo arquitetural
-
-### Funcionalidade 1: Criar assinatura
-
-- **Onde o fluxo começa:** CLI, pelo comando `create-subscription`
-- **Quais componentes participam:** `CLI -> CreateSubscription -> SubscriptionRepository -> FileSubscription`
-- **Onde fica a regra de negócio:** no caso de uso `CreateSubscription`, que cria a entidade `Subscription` com status inicial `active`
-- **Onde os dados são armazenados ou consultados:** arquivos JSON em `data/subscriptions`
-- **Como executar ou testar:** `go run ./cmd/app create-subscription customer-1 basic-plan`
-- **Resultado esperado:** uma nova assinatura é criada e um arquivo JSON é salvo em `data/subscriptions`
-
-### Funcionalidade 2: Listar assinaturas
-
-- **Onde o fluxo começa:** CLI, pelo comando `list-subscriptions`
-- **Quais componentes participam:** `CLI -> ListSubscriptions -> SubscriptionRepository -> FileSubscription`
-- **Onde fica a regra de negócio:** no caso de uso `ListSubscriptions`, que coordena a consulta
-- **Onde os dados são armazenados ou consultados:** arquivos JSON em `data/subscriptions`
-- **Como executar ou testar:** `go run ./cmd/app list-subscriptions`
-- **Resultado esperado:** todas as assinaturas armazenadas são exibidas no terminal
-
-### Funcionalidade 3: Consultar assinatura
-
-- **Onde o fluxo começa:** CLI, pelo comando `show-subscription SUBSCRIPTION_ID`
-- **Quais componentes participam:** `CLI -> GetSubscription -> SubscriptionRepository -> FileSubscription`
-- **Onde fica a regra de negócio:** no caso de uso `GetSubscription`, que busca a assinatura pelo id
-- **Onde os dados são armazenados ou consultados:** arquivos JSON em `data/subscriptions`
-- **Como executar ou testar:** `go run ./cmd/app show-subscription SUBSCRIPTION_ID`
-- **Resultado esperado:** a assinatura é exibida no terminal ou a CLI informa que ela não foi encontrada
-
-### Funcionalidade 4: Atualizar assinatura
-
-- **Onde o fluxo começa:** CLI, pelo comando `update-subscription SUBSCRIPTION_ID CUSTOMER_ID PLAN_ID STATUS`
-- **Quais componentes participam:** `CLI -> UpdateSubscription -> SubscriptionRepository -> FileSubscription`
-- **Onde fica a regra de negócio:** no caso de uso `UpdateSubscription`, que verifica a existência da assinatura antes de sobrescrever os dados
-- **Onde os dados são armazenados ou consultados:** arquivos JSON em `data/subscriptions`
-- **Como executar ou testar:** `go run ./cmd/app update-subscription SUBSCRIPTION_ID customer-2 premium-plan suspended`
-- **Resultado esperado:** a assinatura é atualizada no arquivo JSON correspondente
-
-### Funcionalidade 5: Apagar assinatura
-
-- **Onde o fluxo começa:** CLI, pelo comando `delete-subscription SUBSCRIPTION_ID`
-- **Quais componentes participam:** `CLI -> DeleteSubscription -> SubscriptionRepository -> FileSubscription`
-- **Onde fica a regra de negócio:** no caso de uso `DeleteSubscription`, que verifica se a assinatura existe antes de apagar
-- **Onde os dados são armazenados ou consultados:** arquivos JSON em `data/subscriptions`
-- **Como executar ou testar:** `go run ./cmd/app delete-subscription SUBSCRIPTION_ID`
-- **Resultado esperado:** o arquivo JSON da assinatura é removido da pasta `data/subscriptions`
-
-## Estrutura principal
-
-```text
-cmd/app/main.go
-internal/domain/entities/subscription.go
-internal/application/ports/subscription_repository.go
-internal/application/usecases/
-internal/adapters/input/cli/cli.go
-internal/adapters/output/repositories/file_subscription.go
-data/subscriptions/
+```
+Adaptadores  →  Portas  →  Domínio
 ```
 
-### Papel das pastas
+- **Domínio** (`internal/domain/entities`): entidades e regras de negócio puras. Não importa nenhum pacote externo.
+- **Portas** (`internal/application/ports`): interfaces Go que definem os contratos de entrada e saída.
+- **Casos de uso** (`internal/application/usecases`): orquestram as operações usando apenas as portas.
+- **Adaptadores de entrada** (`internal/adapters/input`): CLI e Webhook HTTP — traduzem o exterior para chamadas aos casos de uso.
+- **Adaptadores de saída** (`internal/adapters/output`): repositório em arquivo JSON, em memória (testes) e serviço de notificação via log.
+- **Composição** (`cmd/app/main.go`): único ponto onde as dependências são instanciadas e injetadas.
 
-- `cmd/app`: inicializa a aplicação e injeta as dependências.
-- `internal/domain/entities`: modela as entidades centrais do domínio.
-- `internal/application/ports`: define os contratos usados pela aplicação.
-- `internal/application/usecases`: concentra os casos de uso do sistema.
-- `internal/adapters/input`: recebe entradas externas, como a CLI.
-- `internal/adapters/output`: implementa infraestrutura concreta, como persistência em arquivos.
-- `data/subscriptions`: armazena um arquivo JSON por assinatura.
+### Estrutura de diretórios
 
-## Como executar
+```
+cmd/app/
+  main.go                             # ponto de entrada e injeção de dependências
+internal/
+  domain/entities/
+    subscription.go                   # entidade central com estados e transições
+    customer.go
+    plan.go
+  application/
+    ports/
+      subscription_repository.go      # interface de persistência
+      notification_service.go         # interface de notificação
+    usecases/
+      create_subscription.go
+      list_subscriptions.go
+      get_subscription.go
+      update_subscription.go
+      cancel_subscription.go
+      delete_subscription.go
+      process_payment_event.go        # reativa ou suspende via evento de pagamento
+      errors.go
+      subscription_usecases_test.go
+  adapters/
+    input/
+      cli/cli.go                      # interpreta os.Args e exibe resultados
+      webhook/handler.go              # recebe eventos HTTP e despacha em goroutine
+    output/
+      repositories/
+        file_subscription.go          # persiste assinaturas como JSON em disco
+        in_memory_subscription.go     # usado nos testes (sem I/O)
+        errors.go
+      notification/
+        log_notification.go           # escreve notificações no stdout
+data/subscriptions/                   # um arquivo .json por assinatura
+```
+
+## Canais de entrada
+
+### CLI
+
+Opera assinaturas via terminal. Todos os comandos compartilham o mesmo repositório em `data/subscriptions`.
 
 ```bash
-go run ./cmd/app create-subscription customer-1 basic-plan
+# Criar assinatura
+go run ./cmd/app create-subscription CUSTOMER_ID PLAN_ID
+
+# Listar todas as assinaturas
 go run ./cmd/app list-subscriptions
+
+# Consultar assinatura por ID
 go run ./cmd/app show-subscription SUBSCRIPTION_ID
-go run ./cmd/app update-subscription SUBSCRIPTION_ID customer-2 premium-plan suspended
+
+# Atualizar assinatura
+go run ./cmd/app update-subscription SUBSCRIPTION_ID CUSTOMER_ID PLAN_ID STATUS
+
+# Cancelar assinatura (verifica elegibilidade a reembolso em 7 dias)
+go run ./cmd/app cancel-subscription SUBSCRIPTION_ID
+
+# Apagar assinatura
 go run ./cmd/app delete-subscription SUBSCRIPTION_ID
 ```
 
-Cada assinatura criada gera um arquivo `.json` próprio dentro de `data/subscriptions`.
+### Webhook de pagamento
 
-## Como rodar os testes
+Inicia um servidor HTTP que recebe eventos do gateway de pagamento. Cada evento é processado em uma goroutine separada — o servidor responde `202 Accepted` imediatamente sem bloquear.
+
+```bash
+# Iniciar o servidor (padrão: :8080)
+go run ./cmd/app serve
+
+# Porta customizada
+go run ./cmd/app serve :9090
+```
+
+**Endpoint:** `POST /webhook/payment`
+
+**Corpo da requisição (JSON):**
+
+```json
+{
+  "subscription_id": "1780356723552945000",
+  "customer_id": "customer-1",
+  "plan_id": "basic-plan",
+  "status": "confirmed"
+}
+```
+
+| Campo `status` | Efeito na assinatura |
+|---|---|
+| `confirmed` | Assinatura suspensa é reativada (`active`) |
+| `refused` | Assinatura ativa é suspensa (`suspended`) |
+
+**Exemplo com curl:**
+
+```bash
+# Pagamento confirmado — reativa a assinatura
+curl -X POST http://localhost:8080/webhook/payment \
+  -H "Content-Type: application/json" \
+  -d '{"subscription_id":"SEU_ID","customer_id":"customer-1","plan_id":"basic","status":"confirmed"}'
+
+# Pagamento recusado — suspende a assinatura
+curl -X POST http://localhost:8080/webhook/payment \
+  -H "Content-Type: application/json" \
+  -d '{"subscription_id":"SEU_ID","customer_id":"customer-1","plan_id":"basic","status":"refused"}'
+```
+
+## Regras de negócio
+
+- Assinatura criada via CLI começa com status `active`.
+- Cancelamento com menos de 7 dias gera elegibilidade a reembolso proporcional.
+- Apenas assinaturas `suspended` podem ser reativadas (`Reactivate`).
+- Apenas assinaturas `active` podem ser suspensas (`Suspend`).
+- O repositório de arquivo e o repositório em memória são protegidos por `sync.RWMutex` para acesso concorrente seguro via webhook.
+
+## Testes
 
 ```bash
 go test ./...
 ```
 
-## O que já está funcionando
+Os testes de casos de uso usam `InMemorySubscription` — sem arquivo, sem rede, sem banco. Cobrem:
 
-- Criação de assinatura via CLI.
-- Listagem de assinaturas via CLI.
-- Consulta de assinatura por id via CLI.
-- Atualização de assinatura via CLI.
-- Exclusão de assinatura via CLI.
-- Persistência em arquivos JSON.
-- Testes automatizados para repositório e casos de uso.
+- CRUD completo de assinaturas
+- Cancelamento com e sem reembolso (janela de 7 dias)
+- Processamento de pagamento confirmado → reativação
+- Processamento de pagamento recusado → suspensão
+- Status inválido → `ErrInvalidPaymentStatus`
+- Assinatura inexistente → `ErrSubscriptionNotFound`
 
-## Repositório Git
+## Critérios de coerência arquitetural (TP2)
 
-- https://github.com/Brugge-Matheus/hexagonal-subscription-manager
+- Nenhum arquivo em `internal/domain/` importa `internal/adapters/`.
+- Casos de uso recebem `SubscriptionRepository` e `NotificationService` por injeção no construtor.
+- Trocar `FileSubscriptionRepository` por `InMemorySubscription` não altera nenhuma linha do domínio ou dos casos de uso.
+- Testes de casos de uso não dependem de arquivo ou infraestrutura.
