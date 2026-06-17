@@ -5,32 +5,29 @@ import (
 	"time"
 
 	"subscription-manager/internal/application/ports"
-	"subscription-manager/internal/domain/entities"
 )
 
 type CancelSubscription struct {
 	SubscriptionRepository ports.SubscriptionRepository
 }
 
-type CancelSubscriptionResult struct {
-	Subscription   entities.Subscription
-	RefundEligible bool
-}
-
-func (c CancelSubscription) Execute(id string) (CancelSubscriptionResult, error) {
+func (c CancelSubscription) Execute(id string) (ports.CancellationResult, error) {
 	subscription, err := c.SubscriptionRepository.FindByID(id)
 	if err != nil {
-		return CancelSubscriptionResult{}, errors.Join(ErrSubscriptionNotFound, err)
+		if errors.Is(err, ports.ErrNotFound) {
+			return ports.CancellationResult{}, ports.ErrSubscriptionNotFound
+		}
+		return ports.CancellationResult{}, err
 	}
 
 	refundEligible := subscription.CanRefundProportionally(time.Now())
 	subscription.Cancel()
 
 	if err := c.SubscriptionRepository.Save(subscription); err != nil {
-		return CancelSubscriptionResult{}, err
+		return ports.CancellationResult{}, err
 	}
 
-	return CancelSubscriptionResult{
+	return ports.CancellationResult{
 		Subscription:   subscription,
 		RefundEligible: refundEligible,
 	}, nil

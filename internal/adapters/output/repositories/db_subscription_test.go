@@ -68,7 +68,7 @@ func TestDBSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("expected suspended after update, got %s", updated.Status)
 	}
 
-	all, err := repository.All()
+	all, err := repository.FindAll()
 	if err != nil {
 		t.Fatalf("unexpected error listing subscriptions: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestDBSubscriptionCRUD(t *testing.T) {
 	}
 
 	if !foundInList {
-		t.Fatal("subscription not found in All()")
+		t.Fatal("subscription not found in FindAll()")
 	}
 
 	if err := repository.Delete(id); err != nil {

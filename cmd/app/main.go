@@ -8,6 +8,7 @@ import (
 
 	"subscription-manager/internal/adapters/input/cli"
 	inputwebhook "subscription-manager/internal/adapters/input/webhook"
+	"subscription-manager/internal/adapters/output/gateway"
 	"subscription-manager/internal/adapters/output/notification"
 	"subscription-manager/internal/adapters/output/repositories"
 	"subscription-manager/internal/application/ports"
@@ -43,6 +44,7 @@ func main() {
 	appCLI := cli.CLI{
 		CreateSubscriptionUseCase: usecases.CreateSubscription{
 			SubscriptionRepository: repository,
+			PaymentGateway:         gateway.FakePaymentGateway{},
 		},
 		ListSubscriptionsUseCase: usecases.ListSubscriptions{
 			SubscriptionRepository: repository,
@@ -54,6 +56,9 @@ func main() {
 			SubscriptionRepository: repository,
 		},
 		CancelSubscriptionUseCase: usecases.CancelSubscription{
+			SubscriptionRepository: repository,
+		},
+		ReactivateSubscriptionUseCase: usecases.ReactivateSubscription{
 			SubscriptionRepository: repository,
 		},
 		DeleteSubscriptionUseCase: usecases.DeleteSubscription{

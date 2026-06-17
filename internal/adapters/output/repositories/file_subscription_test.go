@@ -39,7 +39,7 @@ func TestFileSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("expected customer-1, got %s", found.CustomerID)
 	}
 
-	all, err := repository.All()
+	all, err := repository.FindAll()
 	if err != nil {
 		t.Fatalf("unexpected error listing subscriptions: %v", err)
 	}

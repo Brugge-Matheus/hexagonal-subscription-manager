@@ -70,7 +70,7 @@ func (r *DBSubscription) FindByID(id string) (entities.Subscription, error) {
 	return sub, nil
 }
 
-func (r *DBSubscription) All() ([]entities.Subscription, error) {
+func (r *DBSubscription) FindAll() ([]entities.Subscription, error) {
 	rows, err := r.db.Query(`
 		SELECT id, customer_id, plan_id, status, created_at, canceled_at
 		FROM subscriptions ORDER BY created_at ASC

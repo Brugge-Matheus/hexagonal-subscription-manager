@@ -18,11 +18,34 @@ Adaptadores  →  Portas  →  Domínio
 ```
 
 - **Domínio** (`internal/domain/entities`): entidades e regras de negócio puras. Não importa nenhum pacote externo.
-- **Portas** (`internal/application/ports`): interfaces Go que definem os contratos de entrada e saída.
+- **Portas** (`internal/application/ports`): interfaces Go que definem os contratos de entrada (driving) e saída (driven).
 - **Casos de uso** (`internal/application/usecases`): orquestram as operações usando apenas as portas.
 - **Adaptadores de entrada** (`internal/adapters/input`): CLI e Webhook HTTP.
-- **Adaptadores de saída** (`internal/adapters/output`): repositório em arquivo JSON, PostgreSQL e notificação via log.
+- **Adaptadores de saída** (`internal/adapters/output`): repositório em arquivo JSON, PostgreSQL, notificação via log e gateway de pagamento fake.
 - **Composição** (`cmd/app/main.go`): único ponto onde as dependências são instanciadas e injetadas.
+
+### Portas
+
+**Driving ports** (chamadas pelos adaptadores de entrada):
+
+| Interface | Operação |
+|---|---|
+| `SubscribeUseCase` | Criar assinatura |
+| `ListSubscriptionsUseCase` | Listar todas as assinaturas |
+| `GetSubscriptionUseCase` | Buscar assinatura por ID |
+| `UpdateSubscriptionUseCase` | Atualizar campos de uma assinatura |
+| `CancelSubscriptionUseCase` | Cancelar com cálculo de elegibilidade de reembolso |
+| `ReactivateSubscriptionUseCase` | Reativar assinatura suspensa |
+| `DeleteSubscriptionUseCase` | Remover assinatura |
+| `ProcessPaymentEventUseCase` | Processar evento do gateway de pagamento |
+
+**Driven ports** (implementadas pelos adaptadores de saída):
+
+| Interface | Responsabilidade |
+|---|---|
+| `SubscriptionRepository` | Persistência (`Save`, `FindByID`, `FindAll`, `Delete`) |
+| `NotificationService` | Envio de notificações ao cliente |
+| `PaymentGateway` | Cobrança e estorno no gateway externo |
 
 ### Estrutura de diretórios
 
@@ -36,14 +59,18 @@ internal/
     plan.go
   application/
     ports/
+      subscription_usecases.go          # 8 driving port interfaces + CancellationResult
       subscription_repository.go        # interface de persistência
       notification_service.go           # interface de notificação
+      payment_gateway.go                # interface de cobrança/estorno
+      errors.go                         # sentinelas compartilhados (ErrNotFound, etc.)
     usecases/
-      create_subscription.go
+      create_subscription.go            # cria assinatura; cobra gateway antes de salvar
       list_subscriptions.go
       get_subscription.go
       update_subscription.go
-      cancel_subscription.go
+      cancel_subscription.go            # cancela com cálculo de reembolso proporcional
+      reactivate_subscription.go        # reativa assinatura suspensa
       delete_subscription.go
       process_payment_event.go          # reativa ou suspende via evento de pagamento
       errors.go
@@ -60,6 +87,8 @@ internal/
         errors.go
       notification/
         log_notification.go             # escreve notificações no stdout
+      gateway/
+        fake_payment_gateway.go         # gateway fake para testes e desenvolvimento
 migrations/
   init.sql                              # cria a tabela subscriptions
 data/subscriptions/                     # um arquivo .json por assinatura (modo file)
@@ -87,6 +116,7 @@ go run ./cmd/app list-subscriptions
 go run ./cmd/app show-subscription SUBSCRIPTION_ID
 go run ./cmd/app update-subscription SUBSCRIPTION_ID CUSTOMER_ID PLAN_ID STATUS
 go run ./cmd/app cancel-subscription SUBSCRIPTION_ID
+go run ./cmd/app reactivate-subscription SUBSCRIPTION_ID
 go run ./cmd/app delete-subscription SUBSCRIPTION_ID
 ```
 
@@ -105,6 +135,7 @@ O container inicializa com a migration `migrations/init.sql` aplicada automatica
 ```bash
 REPOSITORY=db go run ./cmd/app create-subscription customer-1 basic-plan
 REPOSITORY=db go run ./cmd/app list-subscriptions
+REPOSITORY=db go run ./cmd/app reactivate-subscription SUBSCRIPTION_ID
 ```
 
 Por padrão o `DATABASE_URL` aponta para o container Docker:
@@ -174,11 +205,14 @@ Os testes unitários usam `InMemorySubscription` — sem arquivo, sem rede, sem 
 - Cancelamento com menos de 7 dias gera elegibilidade a reembolso proporcional.
 - Apenas assinaturas `suspended` podem ser reativadas.
 - Apenas assinaturas `active` podem ser suspensas.
+- Eventos de pagamento idempotentes são ignorados: se a assinatura já está no estado alvo, nenhuma escrita ocorre e nenhuma notificação é enviada.
+- A cobrança no gateway ocorre antes da persistência: se o `Save` falhar após um `Charge` bem-sucedido, um estorno (`Refund`) é disparado automaticamente como transação compensatória.
 - `FileSubscriptionRepository` e `DBSubscriptionRepository` são protegidos por `sync.RWMutex` para acesso concorrente seguro via webhook.
 
 ## Critérios de coerência arquitetural (TP2)
 
 - Nenhum arquivo em `internal/domain/` importa `internal/adapters/`.
-- Casos de uso recebem `SubscriptionRepository` e `NotificationService` por injeção no construtor.
+- Casos de uso recebem dependências exclusivamente por injeção — `SubscriptionRepository`, `NotificationService` e `PaymentGateway` são interfaces definidas em `ports`.
+- Adaptadores de entrada (`cli`, `webhook`) dependem apenas de `ports` — não importam nenhum pacote de `usecases`.
 - Trocar `FileSubscriptionRepository` por `DBSubscriptionRepository` não altera nenhuma linha do domínio ou dos casos de uso — apenas a variável `REPOSITORY` em `main.go`.
-- Testes de casos de uso não dependem de arquivo ou infraestrutura.
+- Testes de casos de uso não dependem de arquivo, rede ou banco de dados.

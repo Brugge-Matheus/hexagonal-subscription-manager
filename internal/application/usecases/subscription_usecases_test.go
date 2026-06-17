@@ -6,8 +6,42 @@ import (
 	"time"
 
 	"subscription-manager/internal/adapters/output/repositories"
+	"subscription-manager/internal/application/ports"
 	"subscription-manager/internal/domain/entities"
 )
+
+type spyGateway struct {
+	chargedFor []string
+}
+
+func (s *spyGateway) Charge(subscriptionID string, amount float64) (string, error) {
+	s.chargedFor = append(s.chargedFor, subscriptionID)
+	return "txn_" + subscriptionID, nil
+}
+
+func (s *spyGateway) Refund(_ string) error { return nil }
+
+func TestCreateSubscriptionCallsGateway(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	spy := &spyGateway{}
+	uc := CreateSubscription{
+		SubscriptionRepository: repository,
+		PaymentGateway:         spy,
+	}
+
+	created, err := uc.Execute("customer-1", "basic-plan")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(spy.chargedFor) != 1 {
+		t.Fatalf("expected gateway to be called once, called %d times", len(spy.chargedFor))
+	}
+
+	if spy.chargedFor[0] != created.ID {
+		t.Fatalf("expected gateway called with %s, got %s", created.ID, spy.chargedFor[0])
+	}
+}
 
 func TestSubscriptionUseCasesCRUD(t *testing.T) {
 	repository := repositories.NewInMemorySubscription()
@@ -112,6 +146,58 @@ func TestCancelSubscriptionWithoutRefundAfterSevenDays(t *testing.T) {
 	}
 }
 
+func TestReactivateSubscription(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ReactivateSubscription{SubscriptionRepository: repository}
+
+	sub := entities.Subscription{
+		ID:        "sub-reactivate-1",
+		Status:    entities.StatusSuspended,
+		CreatedAt: time.Now(),
+	}
+	if err := repository.Save(sub); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	result, err := uc.Execute(sub.ID)
+	if err != nil {
+		t.Fatalf("unexpected error reactivating subscription: %v", err)
+	}
+
+	if result.Status != entities.StatusActive {
+		t.Fatalf("expected active status, got %s", result.Status)
+	}
+}
+
+func TestReactivateSubscriptionNotSuspended(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ReactivateSubscription{SubscriptionRepository: repository}
+
+	sub := entities.Subscription{
+		ID:        "sub-reactivate-2",
+		Status:    entities.StatusActive,
+		CreatedAt: time.Now(),
+	}
+	if err := repository.Save(sub); err != nil {
+		t.Fatalf("unexpected error saving subscription: %v", err)
+	}
+
+	_, err := uc.Execute(sub.ID)
+	if !errors.Is(err, ports.ErrSubscriptionNotSuspended) {
+		t.Fatalf("expected ports.ErrSubscriptionNotSuspended, got %v", err)
+	}
+}
+
+func TestReactivateSubscriptionNotFound(t *testing.T) {
+	repository := repositories.NewInMemorySubscription()
+	uc := ReactivateSubscription{SubscriptionRepository: repository}
+
+	_, err := uc.Execute("nonexistent")
+	if !errors.Is(err, ports.ErrSubscriptionNotFound) {
+		t.Fatalf("expected ports.ErrSubscriptionNotFound, got %v", err)
+	}
+}
+
 func TestProcessPaymentEventConfirmed(t *testing.T) {
 	repository := repositories.NewInMemorySubscription()
 	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
@@ -193,7 +279,7 @@ func TestProcessPaymentEventNotFound(t *testing.T) {
 	uc := ProcessPaymentEvent{SubscriptionRepository: repository}
 
 	err := uc.Execute("nonexistent", "", "", "confirmed")
-	if !errors.Is(err, ErrSubscriptionNotFound) {
-		t.Fatalf("expected ErrSubscriptionNotFound, got %v", err)
+	if !errors.Is(err, ports.ErrSubscriptionNotFound) {
+		t.Fatalf("expected ports.ErrSubscriptionNotFound, got %v", err)
 	}
 }

@@ -34,7 +34,7 @@ func (r *InMemorySubscription) FindByID(id string) (entities.Subscription, error
 	return subscription, nil
 }
 
-func (r *InMemorySubscription) All() ([]entities.Subscription, error) {
+func (r *InMemorySubscription) FindAll() ([]entities.Subscription, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	subscriptions := make([]entities.Subscription, 0, len(r.subscriptions))

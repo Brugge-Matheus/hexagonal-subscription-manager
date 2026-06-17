@@ -7,18 +7,19 @@ import (
 	"io"
 	"strings"
 
-	"subscription-manager/internal/application/usecases"
+	"subscription-manager/internal/application/ports"
 	"subscription-manager/internal/domain/entities"
 )
 
 type CLI struct {
-	CreateSubscriptionUseCase usecases.CreateSubscription
-	ListSubscriptionsUseCase  usecases.ListSubscriptions
-	GetSubscriptionUseCase    usecases.GetSubscription
-	UpdateSubscriptionUseCase usecases.UpdateSubscription
-	CancelSubscriptionUseCase usecases.CancelSubscription
-	DeleteSubscriptionUseCase usecases.DeleteSubscription
-	Out                       io.Writer
+	CreateSubscriptionUseCase     ports.SubscribeUseCase
+	ListSubscriptionsUseCase      ports.ListSubscriptionsUseCase
+	GetSubscriptionUseCase        ports.GetSubscriptionUseCase
+	UpdateSubscriptionUseCase     ports.UpdateSubscriptionUseCase
+	CancelSubscriptionUseCase     ports.CancelSubscriptionUseCase
+	ReactivateSubscriptionUseCase ports.ReactivateSubscriptionUseCase
+	DeleteSubscriptionUseCase     ports.DeleteSubscriptionUseCase
+	Out                           io.Writer
 }
 
 func (c CLI) Call(argv []string) error {
@@ -38,6 +39,8 @@ func (c CLI) Call(argv []string) error {
 		return c.updateSubscription(argv[1:])
 	case "cancel-subscription":
 		return c.cancelSubscription(argv[1:])
+	case "reactivate-subscription":
+		return c.reactivateSubscription(argv[1:])
 	case "delete-subscription":
 		return c.deleteSubscription(argv[1:])
 	default:
@@ -96,7 +99,7 @@ func (c CLI) showSubscription(args []string) error {
 
 	subscription, err := c.GetSubscriptionUseCase.Execute(args[0])
 	if err != nil {
-		if errors.Is(err, usecases.ErrSubscriptionNotFound) {
+		if errors.Is(err, ports.ErrSubscriptionNotFound) {
 			return c.writeLine("Subscription not found.")
 		}
 
@@ -113,7 +116,7 @@ func (c CLI) updateSubscription(args []string) error {
 
 	subscription, err := c.UpdateSubscriptionUseCase.Execute(args[0], args[1], args[2], args[3])
 	if err != nil {
-		if errors.Is(err, usecases.ErrSubscriptionNotFound) {
+		if errors.Is(err, ports.ErrSubscriptionNotFound) {
 			return c.writeLine("Subscription not found.")
 		}
 
@@ -123,6 +126,25 @@ func (c CLI) updateSubscription(args []string) error {
 	return c.writeSubscription("Subscription updated successfully.", subscription)
 }
 
+func (c CLI) reactivateSubscription(args []string) error {
+	if len(args) < 1 {
+		return c.writeLine("missing subscription id for reactivate-subscription")
+	}
+
+	subscription, err := c.ReactivateSubscriptionUseCase.Execute(args[0])
+	if err != nil {
+		switch {
+		case errors.Is(err, ports.ErrSubscriptionNotFound):
+			return c.writeLine("Subscription not found.")
+		case errors.Is(err, ports.ErrSubscriptionNotSuspended):
+			return c.writeLine("Subscription is not suspended and cannot be reactivated.")
+		}
+		return err
+	}
+
+	return c.writeSubscription("Subscription reactivated successfully.", subscription)
+}
+
 func (c CLI) deleteSubscription(args []string) error {
 	if len(args) < 1 {
 		return c.writeLine("missing subscription id for delete-subscription")
@@ -130,7 +152,7 @@ func (c CLI) deleteSubscription(args []string) error {
 
 	err := c.DeleteSubscriptionUseCase.Execute(args[0])
 	if err != nil {
-		if errors.Is(err, usecases.ErrSubscriptionNotFound) {
+		if errors.Is(err, ports.ErrSubscriptionNotFound) {
 			return c.writeLine("Subscription not found.")
 		}
 
@@ -147,7 +169,7 @@ func (c CLI) cancelSubscription(args []string) error {
 
 	result, err := c.CancelSubscriptionUseCase.Execute(args[0])
 	if err != nil {
-		if errors.Is(err, usecases.ErrSubscriptionNotFound) {
+		if errors.Is(err, ports.ErrSubscriptionNotFound) {
 			return c.writeLine("Subscription not found.")
 		}
 
@@ -183,6 +205,7 @@ func (c CLI) printUsage() {
   go run ./cmd/app show-subscription SUBSCRIPTION_ID
   go run ./cmd/app update-subscription SUBSCRIPTION_ID CUSTOMER_ID PLAN_ID STATUS
   go run ./cmd/app cancel-subscription SUBSCRIPTION_ID
+  go run ./cmd/app reactivate-subscription SUBSCRIPTION_ID
   go run ./cmd/app delete-subscription SUBSCRIPTION_ID`)
 }
 

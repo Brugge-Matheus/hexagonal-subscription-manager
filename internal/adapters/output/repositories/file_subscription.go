@@ -24,12 +24,12 @@ func NewFileSubscription(basePath string) (*FileSubscription, error) {
 }
 
 func (f *FileSubscription) Save(subscription entities.Subscription) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	data, err := json.MarshalIndent(subscription, "", "  ")
 	if err != nil {
 		return err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	return os.WriteFile(f.filePath(subscription.ID), data, 0o644)
 }
 
@@ -50,7 +50,7 @@ func (f *FileSubscription) FindByID(id string) (entities.Subscription, error) {
 	return subscription, nil
 }
 
-func (f *FileSubscription) All() ([]entities.Subscription, error) {
+func (f *FileSubscription) FindAll() ([]entities.Subscription, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	entries, err := filepath.Glob(filepath.Join(f.basePath, "*.json"))

@@ -1,5 +1,5 @@
 package repositories
 
-import "errors"
+import "subscription-manager/internal/application/ports"
 
-var ErrSubscriptionNotFound = errors.New("subscription not found")
+var ErrSubscriptionNotFound = ports.ErrNotFound

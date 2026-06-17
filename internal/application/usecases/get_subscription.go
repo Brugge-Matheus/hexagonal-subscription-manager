@@ -14,7 +14,10 @@ type GetSubscription struct {
 func (g GetSubscription) Execute(id string) (entities.Subscription, error) {
 	subscription, err := g.SubscriptionRepository.FindByID(id)
 	if err != nil {
-		return entities.Subscription{}, errors.Join(ErrSubscriptionNotFound, err)
+		if errors.Is(err, ports.ErrNotFound) {
+			return entities.Subscription{}, ports.ErrSubscriptionNotFound
+		}
+		return entities.Subscription{}, err
 	}
 
 	return subscription, nil

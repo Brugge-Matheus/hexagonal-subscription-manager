@@ -10,5 +10,5 @@ type ListSubscriptions struct {
 }
 
 func (l ListSubscriptions) Execute() ([]entities.Subscription, error) {
-	return l.SubscriptionRepository.All()
+	return l.SubscriptionRepository.FindAll()
 }

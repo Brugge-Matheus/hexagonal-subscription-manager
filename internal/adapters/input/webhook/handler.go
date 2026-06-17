@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"subscription-manager/internal/application/usecases"
+	"subscription-manager/internal/application/ports"
 )
 
 type PaymentEvent struct {
@@ -16,10 +16,10 @@ type PaymentEvent struct {
 }
 
 type Handler struct {
-	processPaymentEvent usecases.ProcessPaymentEvent
+	processPaymentEvent ports.ProcessPaymentEventUseCase
 }
 
-func NewHandler(uc usecases.ProcessPaymentEvent) *Handler {
+func NewHandler(uc ports.ProcessPaymentEventUseCase) *Handler {
 	return &Handler{processPaymentEvent: uc}
 }
 

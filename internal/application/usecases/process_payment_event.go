@@ -14,21 +14,37 @@ type ProcessPaymentEvent struct {
 func (p ProcessPaymentEvent) Execute(subscriptionID, customerID, planID, status string) error {
 	subscription, err := p.SubscriptionRepository.FindByID(subscriptionID)
 	if err != nil {
-		return errors.Join(ErrSubscriptionNotFound, err)
+		if errors.Is(err, ports.ErrNotFound) {
+			return ports.ErrSubscriptionNotFound
+		}
+		return err
 	}
 
+	prevStatus := subscription.Status
 	switch status {
 	case "confirmed":
 		subscription.Reactivate()
-		p.notify(subscription.CustomerID, "payment_confirmed", "payment confirmed, subscription reactivated")
 	case "refused":
 		subscription.Suspend()
-		p.notify(subscription.CustomerID, "payment_refused", "payment refused, subscription suspended")
 	default:
 		return ErrInvalidPaymentStatus
 	}
 
-	return p.SubscriptionRepository.Save(subscription)
+	if subscription.Status == prevStatus {
+		return nil
+	}
+
+	if err := p.SubscriptionRepository.Save(subscription); err != nil {
+		return err
+	}
+
+	switch status {
+	case "confirmed":
+		p.notify(subscription.CustomerID, "payment_confirmed", "payment confirmed, subscription reactivated")
+	case "refused":
+		p.notify(subscription.CustomerID, "payment_refused", "payment refused, subscription suspended")
+	}
+	return nil
 }
 
 func (p ProcessPaymentEvent) notify(customerID, event, message string) {

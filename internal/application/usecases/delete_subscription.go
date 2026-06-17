@@ -13,7 +13,10 @@ type DeleteSubscription struct {
 func (d DeleteSubscription) Execute(id string) error {
 	_, err := d.SubscriptionRepository.FindByID(id)
 	if err != nil {
-		return errors.Join(ErrSubscriptionNotFound, err)
+		if errors.Is(err, ports.ErrNotFound) {
+			return ports.ErrSubscriptionNotFound
+		}
+		return err
 	}
 
 	return d.SubscriptionRepository.Delete(id)
