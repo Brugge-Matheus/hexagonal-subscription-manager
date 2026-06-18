@@ -16,5 +16,17 @@ services:
       timeout: 5s
       retries: 5
 
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      REPOSITORY: db
+      DATABASE_URL: postgres://subscription_manager:subscription_manager@postgres:5432/subscription_manager?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:

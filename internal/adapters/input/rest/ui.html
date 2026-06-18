@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscription Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f7fa;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --text: #1e293b;
+      --muted: #64748b;
+      --code-bg: #0f172a;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--primary);
+      color: white;
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 700; }
+    header span { font-size: 0.75rem; opacity: 0.75; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      background: var(--bg);
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .card-body {
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.2rem; }
+    .field label { font-size: 0.7rem; color: var(--muted); font-weight: 500; }
+
+    input, select {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.82rem;
+      width: 100%;
+      outline: none;
+      background: white;
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+
+    .row { display: flex; gap: 0.4rem; }
+    .row .field { flex: 1; }
+
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0.4rem 0.875rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 0.35rem;
+      transition: background 0.15s;
+    }
+    button:hover { background: var(--primary-hover); }
+    button.danger { background: var(--danger); }
+    button.danger:hover { background: var(--danger-hover); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .get    { background: #1d4ed8; color: white; }
+    .post   { background: #15803d; color: white; }
+    .put    { background: #b45309; color: white; }
+    .delete { background: #b91c1c; color: white; }
+
+    .results-panel {
+      display: flex;
+      flex-direction: column;
+      background: var(--code-bg);
+      overflow: hidden;
+    }
+
+    .results-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 1rem;
+      border-bottom: 1px solid #1e293b;
+      flex-shrink: 0;
+    }
+
+    .results-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #last-id {
+      font-size: 0.7rem;
+      color: #475569;
+    }
+    #last-id span { color: #a78bfa; font-family: monospace; }
+
+    .results-top button {
+      background: transparent;
+      color: #475569;
+      border: 1px solid #1e293b;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.68rem;
+      width: auto;
+      margin: 0;
+    }
+    .results-top button:hover { background: #1e293b; color: #94a3b8; }
+
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.25rem;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.82rem;
+      line-height: 1.65;
+      color: #94a3b8;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    #output.success { color: #86efac; }
+    #output.error   { color: #fca5a5; }
+    #output.info    { color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Subscription Manager</h1>
+  <span>Arquitetura Hexagonal · TP2 Arquitetura de Software</span>
+</header>
+
+<div class="layout">
+
+  <div class="sidebar">
+
+    <div class="card">
+      <div class="card-header"><span class="badge post">POST</span> Criar Assinatura</div>
+      <div class="card-body">
+        <form id="form-create">
+          <div class="row">
+            <div class="field">
+              <label>Customer ID</label>
+              <input name="customer_id" placeholder="customer-1" required>
+            </div>
+            <div class="field">
+              <label>Plan ID</label>
+              <input name="plan_id" placeholder="basic-plan" required>
+            </div>
+          </div>
+          <button type="submit">Criar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge get">GET</span> Listar Assinaturas</div>
+      <div class="card-body">
+        <button id="btn-list">Listar Todas</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge get">GET</span> Buscar Assinatura</div>
+      <div class="card-body">
+        <form id="form-show">
+          <div class="field">
+            <label>ID</label>
+            <input class="id-input" name="sub_id" placeholder="ID da assinatura" required>
+          </div>
+          <button type="submit">Buscar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge put">PUT</span> Atualizar Assinatura</div>
+      <div class="card-body">
+        <form id="form-update">
+          <div class="field">
+            <label>ID</label>
+            <input class="id-input" name="sub_id" placeholder="ID da assinatura" required>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Customer ID</label>
+              <input name="customer_id" placeholder="customer-1" required>
+            </div>
+            <div class="field">
+              <label>Plan ID</label>
+              <input name="plan_id" placeholder="basic-plan" required>
+            </div>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select name="status">
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="canceled">canceled</option>
+            </select>
+          </div>
+          <button type="submit">Atualizar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge post">POST</span> Cancelar Assinatura</div>
+      <div class="card-body">
+        <form id="form-cancel">
+          <div class="field">
+            <label>ID</label>
+            <input class="id-input" name="sub_id" placeholder="ID da assinatura" required>
+          </div>
+          <button type="submit" class="danger">Cancelar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge post">POST</span> Reativar Assinatura</div>
+      <div class="card-body">
+        <form id="form-reactivate">
+          <div class="field">
+            <label>ID</label>
+            <input class="id-input" name="sub_id" placeholder="ID da assinatura" required>
+          </div>
+          <button type="submit">Reativar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge delete">DELETE</span> Deletar Assinatura</div>
+      <div class="card-body">
+        <form id="form-delete">
+          <div class="field">
+            <label>ID</label>
+            <input class="id-input" name="sub_id" placeholder="ID da assinatura" required>
+          </div>
+          <button type="submit" class="danger">Deletar</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="badge post">POST</span> Simular Evento de Pagamento</div>
+      <div class="card-body">
+        <form id="form-webhook">
+          <div class="field">
+            <label>Subscription ID</label>
+            <input class="id-input" name="subscription_id" placeholder="ID da assinatura" required>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label>Customer ID</label>
+              <input name="customer_id" placeholder="customer-1" required>
+            </div>
+            <div class="field">
+              <label>Plan ID</label>
+              <input name="plan_id" placeholder="basic-plan" required>
+            </div>
+          </div>
+          <div class="field">
+            <label>Status do Pagamento</label>
+            <select name="status">
+              <option value="confirmed">confirmed — reativa assinatura</option>
+              <option value="refused">refused — suspende assinatura</option>
+            </select>
+          </div>
+          <button type="submit">Enviar Evento</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="results-panel">
+    <div class="results-top">
+      <span class="results-label">Resultado</span>
+      <span id="last-id"></span>
+      <button id="btn-clear">limpar</button>
+    </div>
+    <pre id="output" class="info">Aguardando operação...</pre>
+  </div>
+
+</div>
+
+<script>
+  let lastID = '';
+
+  function setOutput(text, type) {
+    const el = document.getElementById('output');
+    el.className = type || '';
+    el.textContent = text;
+  }
+
+  function setLastID(id) {
+    lastID = id;
+    document.getElementById('last-id').innerHTML = 'último ID: <span>' + id + '</span>';
+    document.querySelectorAll('.id-input').forEach(el => { el.value = id; });
+  }
+
+  async function request(method, path, body) {
+    setOutput('Aguardando...', 'info');
+    try {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+
+      const res = await fetch(path, opts);
+
+      if (res.status === 204) {
+        setOutput('HTTP 204 No Content\n\n✓ Operação concluída.', 'success');
+        return;
+      }
+      if (res.status === 202) {
+        setOutput('HTTP 202 Accepted\n\n✓ Evento recebido.\nProcessando em background via goroutine.', 'success');
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      const pretty = data ? JSON.stringify(data, null, 2) : '(sem corpo)';
+      const ok = res.status < 400;
+      setOutput('HTTP ' + res.status + '\n\n' + pretty, ok ? 'success' : 'error');
+
+      if (ok && data) {
+        if (data.id)                                   setLastID(data.id);
+        else if (data.subscription && data.subscription.id) setLastID(data.subscription.id);
+        else if (Array.isArray(data) && data[0] && data[0].id) setLastID(data[0].id);
+      }
+    } catch (err) {
+      setOutput('Erro de rede: ' + err.message + '\n\nO servidor está rodando?', 'error');
+    }
+  }
+
+  document.getElementById('form-create').onsubmit = e => {
+    e.preventDefault();
+    const f = e.target;
+    request('POST', '/subscriptions', {
+      customer_id: f.customer_id.value,
+      plan_id: f.plan_id.value,
+    });
+  };
+
+  document.getElementById('btn-list').onclick = () => request('GET', '/subscriptions');
+
+  document.getElementById('form-show').onsubmit = e => {
+    e.preventDefault();
+    request('GET', '/subscriptions/' + e.target.sub_id.value);
+  };
+
+  document.getElementById('form-update').onsubmit = e => {
+    e.preventDefault();
+    const f = e.target;
+    request('PUT', '/subscriptions/' + f.sub_id.value, {
+      customer_id: f.customer_id.value,
+      plan_id: f.plan_id.value,
+      status: f.status.value,
+    });
+  };
+
+  document.getElementById('form-cancel').onsubmit = e => {
+    e.preventDefault();
+    request('POST', '/subscriptions/' + e.target.sub_id.value + '/cancel');
+  };
+
+  document.getElementById('form-reactivate').onsubmit = e => {
+    e.preventDefault();
+    request('POST', '/subscriptions/' + e.target.sub_id.value + '/reactivate');
+  };
+
+  document.getElementById('form-delete').onsubmit = e => {
+    e.preventDefault();
+    request('DELETE', '/subscriptions/' + e.target.sub_id.value);
+  };
+
+  document.getElementById('form-webhook').onsubmit = e => {
+    e.preventDefault();
+    const f = e.target;
+    request('POST', '/webhook/payment', {
+      subscription_id: f.subscription_id.value,
+      customer_id: f.customer_id.value,
+      plan_id: f.plan_id.value,
+      status: f.status.value,
+    });
+  };
+
+  document.getElementById('btn-clear').onclick = () => {
+    setOutput('Aguardando operação...', 'info');
+  };
+</script>
+
+</body>
+</html>

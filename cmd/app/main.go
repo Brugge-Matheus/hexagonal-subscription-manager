@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"subscription-manager/internal/adapters/input/cli"
-	inputwebhook "subscription-manager/internal/adapters/input/webhook"
+	inputrest "subscription-manager/internal/adapters/input/rest"
 	"subscription-manager/internal/adapters/output/gateway"
 	"subscription-manager/internal/adapters/output/notification"
 	"subscription-manager/internal/adapters/output/repositories"
@@ -25,16 +25,37 @@ func main() {
 			addr = os.Args[2]
 		}
 
-		handler := inputwebhook.NewHandler(usecases.ProcessPaymentEvent{
-			SubscriptionRepository: repository,
-			NotificationService:    notifier,
-		})
+		server := &inputrest.Server{
+			CreateSubscriptionUseCase: usecases.CreateSubscription{
+				SubscriptionRepository: repository,
+				PaymentGateway:         gateway.FakePaymentGateway{},
+			},
+			ListSubscriptionsUseCase: usecases.ListSubscriptions{
+				SubscriptionRepository: repository,
+			},
+			GetSubscriptionUseCase: usecases.GetSubscription{
+				SubscriptionRepository: repository,
+			},
+			UpdateSubscriptionUseCase: usecases.UpdateSubscription{
+				SubscriptionRepository: repository,
+			},
+			CancelSubscriptionUseCase: usecases.CancelSubscription{
+				SubscriptionRepository: repository,
+			},
+			ReactivateSubscriptionUseCase: usecases.ReactivateSubscription{
+				SubscriptionRepository: repository,
+			},
+			DeleteSubscriptionUseCase: usecases.DeleteSubscription{
+				SubscriptionRepository: repository,
+			},
+			ProcessPaymentEventUseCase: usecases.ProcessPaymentEvent{
+				SubscriptionRepository: repository,
+				NotificationService:    notifier,
+			},
+		}
 
-		mux := http.NewServeMux()
-		mux.Handle("/webhook/payment", handler)
-
-		log.Printf("webhook server listening on %s", addr)
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Printf("server listening on %s — open http://localhost%s", addr, addr)
+		if err := http.ListenAndServe(addr, server.Handler()); err != nil {
 			log.Fatal(err)
 		}
 
